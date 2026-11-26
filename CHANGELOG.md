@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.9 (versionCode 10)
+
+### Web remote (mobile redesign)
+- One-screen layout: header, pad, controls in thumb reach, and a bottom dock. Landscape puts the pad and controls side by side.
+- **D-pad / Swipe** switch on the main screen. Swipe and hold keeps scrolling; speed is adjustable.
+- **Bottom dock:** shows apps (3, 4 or 5), navigation, or nothing; labels can be turned off.
+- **App customization:** reorder with up/down buttons (the first apps fill the dock), add, edit, delete.
+- Light / dark / auto theme with a one-tap header toggle; text colors are tested for 4.5:1 contrast.
+- Bottom sheets built on native modal dialogs. Channel, input and TV settings moved to **More**.
+- The haptics switch is replaced by an explanation on browsers without vibration (all iOS browsers).
+- Saved v1.8 preferences and app buttons carry over.
+- Tests in `web-tests/`.
+
+### Server
+- The Python server now serves the same page as the APK. The old `scripts/static/index.html` is removed.
+
 ## 1.8 (versionCode 9)
 
 ### Web remote (rewritten)

@@ -12,8 +12,8 @@ android {
         applicationId = "com.porter.tvremote"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.8"
+        versionCode = 10
+        versionName = "1.9"
     }
 
     val releaseKeystorePath = providers.gradleProperty("TV_REMOTE_KEYSTORE_PATH").orNull

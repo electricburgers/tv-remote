@@ -205,8 +205,9 @@ tv-remote/
 │   ├── remote_server.py    # Flask server + REST API
 │   ├── tv.py               # CLI implementation
 │   ├── keygen.py           # ADB RSA key generator
-│   └── static/index.html   # Web remote UI
 ├── tv-remote-apk/          # On-device Android APK (Ktor server on port 8080 by default)
+│   └── app/src/main/assets/index.html   # Web remote UI, served by both servers
+├── web-tests/              # Unit and browser tests for the web remote
 └── docs/                   # Protocol notes, keycode reference
 ```
 
@@ -217,6 +218,19 @@ tv-remote/
 - **Unicode text input is not supported** — Android's `adb shell input text` only handles ASCII. For full Unicode support, [ADBKeyBoard](https://github.com/senzhk/ADBKeyBoard) would need to be installed on the TV.
 - **Google Assistant button** uses `am start` directly (more reliable than keycode 84 which is a voice-streaming protocol trigger, not a UI launcher).
 - `config.json` is in `.gitignore` — it contains your TV's IP and MAC address and is never committed.
+
+---
+
+## Web remote tests
+
+```bash
+cd web-tests
+npm install
+npx playwright install chromium webkit   # first time only
+npm test                                 # unit tests, then Android + iPhone browser tests
+```
+
+The tests run the real page against a fake TV, so no TV or server is needed.
 
 ---
 

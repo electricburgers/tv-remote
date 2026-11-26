@@ -37,4 +37,9 @@ tv-remote-apk/store-assets/*.mp4
 # Local secrets
 .env.token
 .env
+# Locally built APKs
+/releases/
 tv-remote-debug.apk
+/web-tests/node_modules/
+/web-tests/test-results/
+/web-tests/playwright-report/

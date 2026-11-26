@@ -12,8 +12,10 @@ logging.getLogger('werkzeug').setLevel(logging.ERROR)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from adb_client import TVClient, TV_HOST, TV_PORT, TV_NAME, require_config
 
-STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-app = Flask(__name__, static_folder=STATIC)
+# One web remote for both servers: the page bundled into the Android app.
+WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..',
+                       'tv-remote-apk', 'app', 'src', 'main', 'assets')
+app = Flask(__name__, static_folder=None)
 
 _tv: TVClient | None = None
 _lock = threading.Lock()
@@ -102,7 +104,7 @@ def config():
 
 @app.route('/')
 def index():
-    return send_from_directory(STATIC, 'index.html')
+    return send_from_directory(WEB_DIR, 'index.html')
 
 
 @app.route('/api/key/<int:code>', methods=['POST'])

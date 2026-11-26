@@ -135,7 +135,7 @@ tv-remote-apk/
 ├── app/
 │   ├── src/main/
 │   │   ├── AndroidManifest.xml
-│   │   ├── assets/index.html          ← web remote UI (ported from scripts/static/)
+│   │   ├── assets/index.html          ← web remote UI (also served by the Python server)
 │   │   ├── kotlin/com/porter/tvremote/
 │   │   │   ├── AdbController.kt       ← AdbLib loopback + all TV commands
 │   │   │   ├── HttpServer.kt          ← Ktor CIO server + REST routes
@@ -204,7 +204,7 @@ Expected in every non-force-stop case: the foreground-service notification remai
 returns, the remote wakes the Shield and launches Kodi, and the HTTP remote remains available
 on its configured port. `START_STICKY` covers ordinary process termination, while an
 explicit Android **Force stop** cannot be recovered by an app until the user launches it.
-- The web UI (`index.html`) is identical to the PC version except for a small ADB indicator dot.
+- The APK and the PC server serve the same `index.html`. The header shows “ADB off” if the on-device APK reports its loopback connection is down.
 
 ## AGP 9.x build notes
 

@@ -1,0 +1,1 @@
+Web remote redesigned for phones: D-pad or swipe switch, swipe-and-hold scrolling, customizable bottom dock, reorderable app buttons, and light/dark themes. Saved settings carry over.
