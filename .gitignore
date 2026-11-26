@@ -37,3 +37,4 @@ tv-remote-apk/store-assets/*.mp4
 # Local secrets
 .env.token
 .env
+tv-remote-debug.apk

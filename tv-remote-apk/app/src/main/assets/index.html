@@ -1,858 +1,901 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Google TV Remote</title>
+<!-- Zoom stays allowed (accessibility). Double-tap zoom is removed per element with
+     touch-action: manipulation below, not by locking the viewport. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TV Remote">
+<title>TV Remote</title>
+<!-- Resolve the theme before first paint so there is no flash of the wrong one. -->
+<script>
+(function () {
+  var t = 'auto';
+  try { t = (JSON.parse(localStorage.getItem('tvr.prefs')) || {}).theme || 'auto'; } catch (e) {}
+  if (t === 'auto') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  document.documentElement.dataset.theme = t;
+})();
+</script>
 <style>
+/* ═══ 1. Tokens ═══════════════════════════════════════════════════════════════
+   --ov is the "ink" colour (white on dark, near-black on light); every translucent
+   surface/text is rgb(var(--ov) / alpha), so a theme is just this block. */
+:root {
+  color-scheme: dark;
+  --ov: 255 255 255;
+  --bg-top: #1c2340;
+  --bg: #0a0a0c;
+  --body-a: #2a2a2e; --body-b: #1c1c1e; --body-c: #161618;
+  --well-a: #2c2c30; --well-b: #1a1a1e;
+  --ok-bg: #2e2e34; --ok-hover: #3d3d44;
+  --sheet: #232327;
+  --shadow: rgb(0 0 0 / .8);
+  --shadow-sm: rgb(0 0 0 / .4);
+  --accent: #4285f4;
+  --danger: #ff6b6b;
+  --good: #34c759;
+  --bad: #ff453a;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ov: 20 24 40;
+  --bg-top: #dfe6fb;
+  --bg: #eef0f5;
+  --body-a: #ffffff; --body-b: #f6f7fb; --body-c: #eceef4;
+  --well-a: #ffffff; --well-b: #e6e9f1;
+  --ok-bg: #ffffff; --ok-hover: #f0f2f8;
+  --sheet: #ffffff;
+  --shadow: rgb(40 50 90 / .28);
+  --shadow-sm: rgb(40 50 90 / .16);
+  --accent: #1a73e8;
+  --danger: #d93025;
+  --good: #1e8e3e;
+  --bad: #d93025;
+}
+
+/* ═══ 2. Base ═════════════════════════════════════════════════════════════════ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+html { background: var(--bg); }
+
 body {
-  min-height: 100vh;
-  background: radial-gradient(ellipse 80% 60% at 50% 0%, #1c2340 0%, #0a0a0c 60%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 28px 16px 40px;
+  min-height: 100vh; min-height: 100dvh;
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, var(--bg-top) 0%, var(--bg) 60%) no-repeat;
+  color: rgb(var(--ov) / .9);
+  display: flex; flex-direction: column; align-items: center;
+  padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+           max(28px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   font-family: -apple-system, 'Google Sans', Roboto, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
 }
 
-.headline {
-  color: rgba(255,255,255,0.22);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 2.5px;
-  text-transform: uppercase;
-  margin-bottom: 18px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.headline::before, .headline::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: rgba(255,255,255,0.08);
-  max-width: 40px;
-}
+/* The double-tap-zoom fix: taps become plain clicks, pinch-zoom/scroll still work. */
+button, input, label, .dpad { touch-action: manipulation; }
 
-/* ─── Remote body ─── */
-.remote {
-  width: 305px;
-  background: linear-gradient(175deg, #2a2a2e 0%, #1c1c1e 55%, #161618 100%);
-  border-radius: 44px;
-  padding: 22px 22px 30px;
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-  box-shadow:
-    0 0 0 1px rgba(255,255,255,0.075),
-    0 1px 0 rgba(255,255,255,0.06) inset,
-    0 -1px 0 rgba(0,0,0,0.4) inset,
-    0 30px 90px rgba(0,0,0,0.85),
-    0 8px 24px rgba(0,0,0,0.5);
-  user-select: none;
-}
-
-/* ─── Status bar ─── */
-.status-bar {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 12px;
-  background: rgba(0,0,0,0.35);
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,0.05);
-  font-size: 11.5px;
-  color: rgba(255,255,255,0.5);
-  line-height: 1;
-}
-.dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: #34c759;
-  flex-shrink: 0;
-  box-shadow: 0 0 5px #34c759;
-  transition: background 0.4s, box-shadow 0.4s;
-}
-.status-bar.offline .dot { background: #ff453a; box-shadow: 0 0 5px #ff453a; }
-#status-app { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#status-screen {
-  font-size: 10px;
-  color: rgba(255,255,255,0.25);
-  font-weight: 500;
-}
-/* ADB loopback indicator (on-device APK only) */
-#adb-dot {
-  width: 5px; height: 5px;
-  border-radius: 50%;
-  background: #444;
-  flex-shrink: 0;
-  transition: background 0.4s;
-}
-#adb-dot.ok { background: #34c759; }
-#adb-dot.err { background: #ff453a; }
-
-/* ─── Base button reset ─── */
 button {
-  border: none;
-  cursor: pointer;
-  outline: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border: none; outline: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font: inherit; color: inherit;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.13s ease, transform 0.1s ease, box-shadow 0.13s ease;
-  position: relative;
-  overflow: hidden;
+  transition: background .13s ease, transform .1s ease;
+  position: relative; overflow: hidden;
+  user-select: none; -webkit-user-select: none;
 }
-button::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: white;
-  opacity: 0;
-  transition: opacity 0.15s;
-  border-radius: inherit;
-}
-button:active::after { opacity: 0.06; }
-button:active { transform: scale(0.91) !important; }
+button:active { transform: scale(.94); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (hover: hover) { button:hover { background-color: rgb(var(--ov) / .12); } }
+[hidden] { display: none !important; }
 
-/* ─── Top row: Input · Settings · Power ─── */
-.top-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 4px;
+/* ═══ 3. Header & status ══════════════════════════════════════════════════════ */
+.header {
+  width: 100%; max-width: 360px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-bottom: 10px;
 }
-.ibtn {
-  width: 46px; height: 46px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.68);
-  font-size: 18px;
+.headline {
+  flex: 1; min-width: 0; text-align: center;
+  color: rgb(var(--ov) / .45);
+  font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.ibtn:hover { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.95); }
-
-.power-btn { color: #ff6b6b; font-size: 20px; }
-.power-btn:hover { background: rgba(255,69,58,0.18); color: #ff453a; }
-
-/* ─── Assistant pill ─── */
-.assistant {
-  width: 100%;
-  height: 48px;
-  border-radius: 24px;
-  background: linear-gradient(135deg, #1967d2 0%, #4285f4 100%);
-  color: white;
-  font-size: 13.5px;
-  font-weight: 500;
-  gap: 9px;
-  box-shadow: 0 4px 16px rgba(66,133,244,0.32), 0 1px 0 rgba(255,255,255,0.15) inset;
-}
-.assistant:hover {
-  background: linear-gradient(135deg, #1e78e6 0%, #5a95f5 100%);
-  box-shadow: 0 4px 22px rgba(66,133,244,0.48), 0 1px 0 rgba(255,255,255,0.15) inset;
-  transform: translateY(-1px);
-}
-.assistant:active { transform: scale(0.97) translateY(0) !important; }
-.mic { font-size: 18px; }
-
-/* ─── D-pad ring ─── */
-.dpad-wrap { display: flex; justify-content: center; }
-
-.dpad {
-  width: 200px; height: 200px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 40% 30%, #2c2c30 0%, #1a1a1e 100%);
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  grid-template-rows: 1fr 1fr 1fr;
-  padding: 12px;
-  gap: 4px;
-  box-shadow:
-    0 0 0 1px rgba(255,255,255,0.06),
-    0 8px 28px rgba(0,0,0,0.65),
-    inset 0 2px 4px rgba(255,255,255,0.03),
-    inset 0 -2px 4px rgba(0,0,0,0.3);
+.hbtn {
+  width: 44px; height: 44px; border-radius: 50%; flex: none;
+  background: rgb(var(--ov) / .07); color: rgb(var(--ov) / .7); font-size: 18px;
 }
 
-.dpad button {
-  background: transparent;
-  color: rgba(255,255,255,0.55);
-  font-size: 14px;
-  border-radius: 8px;
-}
-.dpad button:hover { background: rgba(255,255,255,0.09); color: rgba(255,255,255,0.92); }
-
-.d-up    { grid-column: 2; grid-row: 1; border-radius: 50% 50% 8px 8px !important; }
-.d-left  { grid-column: 1; grid-row: 2; border-radius: 50% 8px 8px 50% !important; }
-.d-ok    {
-  grid-column: 2; grid-row: 2;
-  border-radius: 50% !important;
-  background: #2e2e34 !important;
-  color: rgba(255,255,255,0.88) !important;
-  font-size: 12.5px !important;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  box-shadow:
-    0 3px 8px rgba(0,0,0,0.5),
-    inset 0 1px 0 rgba(255,255,255,0.08),
-    inset 0 -1px 0 rgba(0,0,0,0.2);
-}
-.d-ok:hover { background: #3d3d44 !important; }
-.d-right { grid-column: 3; grid-row: 2; border-radius: 8px 50% 50% 8px !important; }
-.d-down  { grid-column: 2; grid-row: 3; border-radius: 8px 8px 50% 50% !important; }
-
-/* ─── Nav row: Back · Home · Recents ─── */
-.nav-row {
-  display: flex;
-  justify-content: space-evenly;
-  align-items: center;
-}
-.nav-btn {
-  width: 72px; height: 50px;
-  border-radius: 16px;
-  background: rgba(255,255,255,0.07);
-  color: rgba(255,255,255,0.65);
-  flex-direction: column;
-  gap: 3px;
-  font-size: 20px;
-}
-.nav-btn:hover { background: rgba(255,255,255,0.13); color: rgba(255,255,255,0.9); }
-.nav-lbl {
-  font-size: 8.5px;
-  font-weight: 600;
-  letter-spacing: 0.6px;
-  color: rgba(255,255,255,0.3);
-  text-transform: uppercase;
-}
-
-/* ─── Channel row ─── */
-.ch-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-}
-.ch-pill {
-  display: flex;
-  align-items: center;
-  background: rgba(255,255,255,0.07);
-  border-radius: 28px;
-  padding: 4px;
-  gap: 0;
-  border: 1px solid rgba(255,255,255,0.06);
-}
-.cbtn {
-  width: 54px; height: 48px;
-  border-radius: 24px;
-  background: transparent;
-  color: rgba(255,255,255,0.65);
-  font-size: 14px;
-  font-weight: 700;
-  flex-direction: column;
-  gap: 2px;
-}
-.cbtn:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.95); }
-.cbtn:first-child { border-radius: 24px 12px 12px 24px; }
-.cbtn:last-child  { border-radius: 12px 24px 24px 12px; }
-.ch-lbl {
-  font-size: 7.5px;
-  font-weight: 700;
-  letter-spacing: 0.8px;
-  color: rgba(255,255,255,0.28);
-  text-transform: uppercase;
-}
-.numpad-open-btn {
-  width: 48px; height: 48px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.07);
-  color: rgba(255,255,255,0.55);
+.banner {
+  width: 100%; max-width: 360px; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 8px 8px 14px; border-radius: 14px;
+  background: rgb(255 69 58 / .14); border: 1px solid rgb(255 69 58 / .35);
   font-size: 13px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-  border: 1px solid rgba(255,255,255,0.06);
 }
-.numpad-open-btn:hover { background: rgba(255,255,255,0.13); color: rgba(255,255,255,0.9); }
+.banner span { flex: 1; }
+.banner button {
+  height: 36px; padding: 0 16px; border-radius: 10px;
+  background: var(--bad) !important; color: #fff; font-weight: 600; font-size: 13px;
+}
 
-/* ─── Numpad modal ─── */
-.numpad-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+.remote {
+  width: 100%; max-width: 360px;
+  background: linear-gradient(175deg, var(--body-a) 0%, var(--body-b) 55%, var(--body-c) 100%);
+  border-radius: 40px; padding: 20px 20px 26px;
+  display: flex; flex-direction: column; gap: 14px;
+  box-shadow: 0 0 0 1px rgb(var(--ov) / .08), 0 24px 60px var(--shadow), 0 6px 18px var(--shadow-sm);
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
-.nkey {
-  height: 56px;
-  border-radius: 14px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.88);
-  font-size: 20px;
-  font-weight: 600;
-  font-family: inherit;
+
+.status-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px; border-radius: 16px;
+  background: rgb(var(--ov) / .07); border: 1px solid rgb(var(--ov) / .06);
+  font-size: 12px; color: rgb(var(--ov) / .6); line-height: 1;
 }
-.nkey:hover { background: rgba(255,255,255,0.15); color: white; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--good); transition: background .4s; }
+.status-bar.offline .dot { background: var(--bad); }
+#status-app { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#status-screen { font-size: 11px; color: rgb(var(--ov) / .4); font-weight: 500; }
+#adb-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: rgb(var(--ov) / .25); transition: background .4s; }
+#adb-dot.ok { background: var(--good); }
+#adb-dot.err { background: var(--bad); }
+
+/* ═══ 4. Controls ═════════════════════════════════════════════════════════════
+   Every tappable control is >= 44px with >= 8px between neighbours. */
+.surface { background: rgb(var(--ov) / .08); color: rgb(var(--ov) / .72); }
+
+.top-row { display: flex; align-items: center; justify-content: space-between; padding: 0 2px; }
+.ibtn { width: 48px; height: 48px; border-radius: 50%; font-size: 18px; }
+.power-btn { color: var(--danger); }
+
+.assistant {
+  width: 100%; height: 52px; border-radius: 26px; gap: 10px;
+  background: linear-gradient(135deg, #1967d2, #4285f4); color: #fff;
+  font-size: 14px; font-weight: 500;
+  box-shadow: 0 4px 14px rgb(66 133 244 / .35);
+}
+.assistant:hover { background-color: transparent; filter: brightness(1.1); }
+
+/* D-pad */
+.dpad-wrap { display: flex; justify-content: center; }
+.dpad {
+  width: min(100%, 230px); aspect-ratio: 1; border-radius: 50%; position: relative;
+  background: radial-gradient(circle at 40% 30%, var(--well-a), var(--well-b));
+  display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  padding: 12px; gap: 4px;
+  box-shadow: 0 0 0 1px rgb(var(--ov) / .07), 0 8px 22px var(--shadow-sm);
+}
+.dpad button { background: transparent; color: rgb(var(--ov) / .6); font-size: 16px; border-radius: 10px; }
+.d-up    { grid-area: 1 / 2; border-radius: 50% 50% 10px 10px !important; }
+.d-left  { grid-area: 2 / 1; border-radius: 50% 10px 10px 50% !important; }
+.d-right { grid-area: 2 / 3; border-radius: 10px 50% 50% 10px !important; }
+.d-down  { grid-area: 3 / 2; border-radius: 10px 10px 50% 50% !important; }
+.dpad .d-ok {
+  grid-area: 2 / 2; border-radius: 50% !important;
+  background: var(--ok-bg); color: rgb(var(--ov) / .9);
+  font-size: 13px; font-weight: 700; letter-spacing: .5px;
+  box-shadow: 0 3px 8px var(--shadow-sm), inset 0 1px 0 rgb(255 255 255 / .1);
+}
+@media (hover: hover) { .dpad .d-ok:hover { background-color: var(--ok-hover); } }
+
+/* Swipe-pad mode: the ring becomes a trackpad (swipe = arrows, tap = OK). */
+[data-swipe="1"] .dpad { touch-action: none; cursor: grab; }
+[data-swipe="1"] .dpad button { visibility: hidden; pointer-events: none; }
+.swipe-hint { display: none; position: absolute; inset: 0; align-items: center; justify-content: center;
+  text-align: center; font-size: 12px; line-height: 1.5; color: rgb(var(--ov) / .45); pointer-events: none; }
+[data-swipe="1"] .swipe-hint { display: flex; }
+
+/* Nav */
+.nav-row { display: flex; justify-content: space-between; gap: 8px; }
+.nav-btn { flex: 1; height: 54px; border-radius: 16px; flex-direction: column; gap: 3px; font-size: 20px; }
+.lbl { font-size: 10px; font-weight: 600; letter-spacing: .6px; color: rgb(var(--ov) / .45); text-transform: uppercase; }
+
+/* Pills (channel, volume) */
+.pair-row { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.pill {
+  display: flex; align-items: center; padding: 4px; border-radius: 30px;
+  background: rgb(var(--ov) / .07); border: 1px solid rgb(var(--ov) / .06);
+}
+.pill button { width: 58px; height: 52px; background: transparent; font-size: 18px; font-weight: 700; flex-direction: column; gap: 1px; color: rgb(var(--ov) / .72); }
+.pill button:first-child { border-radius: 26px 12px 12px 26px; }
+.pill button:last-child  { border-radius: 12px 26px 26px 12px; }
+.pill .lbl { font-size: 9px; }
+.round { width: 52px; height: 52px; border-radius: 50%; font-size: 16px; font-weight: 700; }
+[data-hand="left"] .pair-row { flex-direction: row-reverse; }
+
+.divider { height: 1px; margin: 0 6px; background: linear-gradient(90deg, transparent, rgb(var(--ov) / .12) 20%, rgb(var(--ov) / .12) 80%, transparent); }
+
+.media-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.media-btn { width: 54px; height: 54px; border-radius: 50%; font-size: 19px; }
+.media-btn.playpause { width: 64px; height: 64px; font-size: 24px; background: rgb(var(--ov) / .14); }
+
+/* App shortcuts */
+.apps-head { display: flex; align-items: center; justify-content: space-between; margin: -4px 4px -6px; }
+.apps-head .lbl { font-size: 10px; }
+.link-btn { height: 36px; padding: 0 10px; background: transparent; color: var(--accent); font-size: 13px; font-weight: 600; border-radius: 10px; }
+.apps-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+.app-btn {
+  height: 52px; border-radius: 12px; flex-direction: column; gap: 1px; padding: 0 4px;
+  background: linear-gradient(145deg, rgb(255 255 255 / .16), rgb(0 0 0 / .14)), var(--c, #555);
+  color: #fff; box-shadow: 0 2px 6px var(--shadow-sm);
+}
+@media (hover: hover) { .app-btn:hover { background-color: var(--c); filter: brightness(1.15); } }
+.app-btn b { font-size: 15px; line-height: 1.1; }
+.app-btn span { max-width: 100%; font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.apps-row.editing .app-btn { outline: 2px dashed rgb(var(--ov) / .55); outline-offset: -3px; }
+.app-add { background: transparent; border: 2px dashed rgb(var(--ov) / .3); color: rgb(var(--ov) / .6); font-size: 24px; box-shadow: none; }
+
+/* ═══ 5. Sheets (modals) ══════════════════════════════════════════════════════ */
+.sheet-bg {
+  position: fixed; inset: 0; z-index: 100; display: none;
+  align-items: center; justify-content: center; padding: 16px;
+  background: rgb(0 0 0 / .6);
+}
+.sheet-bg.open { display: flex; }
+.sheet {
+  width: 100%; max-width: 360px; max-height: 100%; overflow-y: auto;
+  background: var(--sheet); border-radius: 24px; padding: 20px;
+  box-shadow: 0 0 0 1px rgb(var(--ov) / .08), 0 24px 60px var(--shadow);
+  display: flex; flex-direction: column; gap: 14px;
+}
+.sheet h2 { font-size: 12px; font-weight: 600; letter-spacing: 1.8px; text-transform: uppercase; color: rgb(var(--ov) / .5); text-align: center; }
+.hint { font-size: 12px; color: rgb(var(--ov) / .45); text-align: center; line-height: 1.5; }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: rgb(var(--ov) / .55); }
+.input {
+  width: 100%; height: 48px; padding: 0 14px; border-radius: 12px;
+  background: rgb(var(--ov) / .06); border: 1px solid rgb(var(--ov) / .15);
+  color: rgb(var(--ov) / .95); font: inherit; font-size: 16px; /* >=16px: no iOS focus zoom */
+  caret-color: var(--accent);
+}
+.input:focus { border-color: var(--accent); outline: none; }
+.btn-row { display: flex; gap: 8px; }
+.btn { flex: 1; height: 48px; border-radius: 12px; font-size: 14px; font-weight: 600; background: rgb(var(--ov) / .08); }
+.btn.primary { flex: 2; background: linear-gradient(135deg, #1967d2, #4285f4); color: #fff; }
+.btn.danger { color: var(--danger); }
+.err-text { color: var(--bad); font-size: 12px; min-height: 1em; }
+
+.numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.nkey { height: 58px; border-radius: 14px; font-size: 22px; font-weight: 600; background: rgb(var(--ov) / .08); }
 .nkey-zero { grid-column: 2; }
 
-/* ─── Divider ─── */
-.divider {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08) 20%, rgba(255,255,255,0.08) 80%, transparent);
-  margin: 0 6px;
-}
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { height: 36px; padding: 0 12px; border-radius: 18px; font-size: 13px; background: rgb(var(--ov) / .08); }
+.swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+.swatch { width: 36px; height: 36px; border-radius: 50%; background: var(--c) !important; box-shadow: inset 0 0 0 2px rgb(255 255 255 / .25); }
+.swatch[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--sheet), 0 0 0 5px var(--accent); }
 
-/* ─── Volume ─── */
-.vol-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-.vol-pill {
-  display: flex;
-  align-items: center;
-  background: rgba(255,255,255,0.07);
-  border-radius: 28px;
-  padding: 4px;
-  gap: 0;
-  border: 1px solid rgba(255,255,255,0.06);
-}
-.vbtn {
-  width: 54px; height: 48px;
-  border-radius: 24px;
-  background: transparent;
-  color: rgba(255,255,255,0.65);
-  font-size: 20px;
-}
-.vbtn:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.95); }
-.vbtn:first-child { border-radius: 24px 12px 12px 24px; }
-.vbtn:last-child  { border-radius: 12px 24px 24px 12px; }
+.sw { display: flex; align-items: center; justify-content: space-between; min-height: 48px; font-size: 15px; gap: 12px; }
+.sw input { appearance: none; -webkit-appearance: none; width: 50px; height: 30px; border-radius: 15px; flex: none;
+  background: rgb(var(--ov) / .2); position: relative; transition: background .15s; cursor: pointer; }
+.sw input::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 3px rgb(0 0 0 / .35); }
+.sw input:checked { background: var(--accent); }
+.sw input:checked::after { transform: translateX(20px); }
 
-.mute-btn {
-  width: 48px; height: 48px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.07);
-  color: rgba(255,255,255,0.55);
-  font-size: 18px;
-  border: 1px solid rgba(255,255,255,0.06);
+.toast {
+  position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); z-index: 200;
+  transform: translate(-50%, 12px); opacity: 0; pointer-events: none; white-space: nowrap;
+  max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis;
+  background: #2c2c30; color: #fff; padding: 10px 20px; border-radius: 22px; font-size: 13px;
+  box-shadow: 0 4px 20px rgb(0 0 0 / .45); transition: opacity .2s, transform .2s;
 }
-.mute-btn:hover { background: rgba(255,255,255,0.13); color: rgba(255,255,255,0.9); }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.err { background: #b41e18; }
 
-/* ─── Media controls ─── */
-.media-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-}
-.media-btn {
-  width: 52px; height: 52px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.65);
-  font-size: 19px;
-}
-.media-btn:hover { background: rgba(255,255,255,0.14); color: rgba(255,255,255,0.95); }
-.media-btn.playpause {
-  width: 62px; height: 62px;
-  font-size: 24px;
-  background: rgba(255,255,255,0.12);
-  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-}
-.media-btn.playpause:hover { background: rgba(255,255,255,0.2); }
+.kbd-hint { margin-top: 14px; max-width: 360px; font-size: 11px; line-height: 1.6; color: rgb(var(--ov) / .35); text-align: center; }
+@media (hover: none) { .kbd-hint { display: none; } }
 
-/* ─── App shortcuts ─── */
-.apps-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-.app-btn {
-  height: 38px;
-  border-radius: 10px;
-  font-size: 10.5px;
-  font-weight: 800;
-  color: white;
-  letter-spacing: 0.2px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-  flex-direction: column;
-  gap: 1px;
-}
-.app-btn:hover { filter: brightness(1.18); transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
-.app-btn:active { transform: scale(0.91) translateY(0) !important; }
-
-.ap-yt { background: linear-gradient(145deg, #cc0000, #ff0000); }
-.ap-nf { background: linear-gradient(145deg, #b00710, #e50914); }
-.ap-pv { background: linear-gradient(145deg, #0073a8, #00a8e0); font-size: 8px; letter-spacing: -0.1px; }
-.ap-dp { background: linear-gradient(145deg, #0e2a8a, #1434cb); }
-
-/* ─── Text modal ─── */
-.text-modal {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.65);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-.text-modal.open { display: flex; }
-
-.text-card {
-  width: 320px;
-  background: linear-gradient(175deg, #2a2a2e 0%, #1c1c1e 100%);
-  border-radius: 22px;
-  padding: 22px 20px 20px;
-  box-shadow:
-    0 0 0 1px rgba(255,255,255,0.08),
-    0 24px 60px rgba(0,0,0,0.8);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.text-card-title {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 1.8px;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.3);
-  text-align: center;
-}
-
-.text-input {
-  width: 100%;
-  background: rgba(0,0,0,0.4);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 12px;
-  padding: 13px 15px;
-  color: rgba(255,255,255,0.92);
-  font-size: 16px;
-  font-family: inherit;
-  outline: none;
-  transition: border-color 0.15s;
-  caret-color: #4285f4;
-}
-.text-input:focus { border-color: rgba(66,133,244,0.6); }
-.text-input::placeholder { color: rgba(255,255,255,0.2); }
-
-.text-actions {
-  display: flex;
-  gap: 10px;
-}
-.text-cancel {
-  flex: 1;
-  height: 44px;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.55);
-  font-size: 14px;
-  font-family: inherit;
-  font-weight: 500;
-}
-.text-cancel:hover { background: rgba(255,255,255,0.14); color: rgba(255,255,255,0.85); }
-.text-send {
-  flex: 2;
-  height: 44px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #1967d2, #4285f4);
-  color: white;
-  font-size: 14px;
-  font-family: inherit;
-  font-weight: 600;
-  box-shadow: 0 3px 12px rgba(66,133,244,0.3);
-}
-.text-send:hover {
-  background: linear-gradient(135deg, #1e78e6, #5a95f5);
-  box-shadow: 0 4px 18px rgba(66,133,244,0.45);
-}
-.text-hint {
-  font-size: 10px;
-  color: rgba(255,255,255,0.15);
-  text-align: center;
-  letter-spacing: 0.3px;
-}
-
-/* ─── Toast ─── */
-#toast {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%) translateY(12px);
-  background: rgba(44,44,48,0.96);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  color: rgba(255,255,255,0.9);
-  padding: 9px 20px;
-  border-radius: 22px;
-  font-size: 13px;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s, transform 0.2s;
-  white-space: nowrap;
-  border: 1px solid rgba(255,255,255,0.08);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-}
-#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-#toast.err  { background: rgba(180,30,24,0.95); border-color: rgba(255,100,90,0.2); }
-
-/* ─── Keyboard hint ─── */
-.kbd-hint {
-  margin-top: 14px;
-  font-size: 10px;
-  color: rgba(255,255,255,0.18);
-  letter-spacing: 0.4px;
-  text-align: center;
-}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 
-<div class="headline" id="headline">TV Remote</div>
+<header class="header">
+  <button class="hbtn" id="btn-settings" data-act="settings" aria-label="Remote settings">⋯</button>
+  <div class="headline" id="headline">TV Remote</div>
+  <button class="hbtn" id="btn-theme" data-act="theme" aria-label="Theme">◐</button>
+</header>
 
-<div class="remote">
+<div class="banner" id="banner" hidden role="alert">
+  <span id="banner-msg"></span>
+  <button data-act="retry">Retry</button>
+</div>
 
-  <!-- Status bar -->
-  <div class="status-bar" id="status-bar">
-    <div class="dot" id="status-dot"></div>
+<main class="remote" id="remote">
+
+  <div class="status-bar" id="status-bar" role="status">
+    <div class="dot"></div>
     <span id="status-app">Connecting…</span>
     <span id="status-screen"></span>
-    <!-- ADB loopback dot: only meaningful when served by the on-device APK -->
+    <!-- Loopback ADB health: only meaningful when served by the on-device APK -->
     <div id="adb-dot" title="ADB loopback"></div>
   </div>
 
-  <!-- Top row: Input / Settings / Text / Power -->
   <div class="top-row">
-    <button class="ibtn" title="Input / Source" onclick="key(178)">⊞</button>
-    <button class="ibtn" title="Settings"       onclick="key(176)">⚙</button>
-    <button class="ibtn" title="Type text (T)"  onclick="openTextModal()" style="font-size:16px">⌨</button>
-    <button class="ibtn power-btn" title="Power (toggle)" onclick="key(26)"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.343 6.343a8 8 0 1 0 11.314 0"/></svg></button>
+    <button class="ibtn surface" data-key="178" aria-label="Input / Source">⊞</button>
+    <button class="ibtn surface" data-key="176" aria-label="TV Settings">⚙</button>
+    <button class="ibtn surface" data-act="text" aria-label="Type text (T)">⌨</button>
+    <button class="ibtn surface power-btn" data-key="26" aria-label="Power">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v8"/><path d="M6.343 6.343a8 8 0 1 0 11.314 0"/></svg>
+    </button>
   </div>
 
-  <!-- Google Assistant / Search -->
-  <button class="assistant" title="Google Assistant" onclick="assistant()">
-    <span class="mic">🎙</span>
-    <span>Google Assistant</span>
-  </button>
+  <button class="assistant" data-act="assistant" aria-label="Google Assistant"><span aria-hidden="true">🎙</span> Google Assistant</button>
 
-  <!-- D-pad navigation ring -->
   <div class="dpad-wrap">
-    <div class="dpad">
-      <button class="d-up"    onclick="key(19)" title="Up">▲</button>
-      <button class="d-left"  onclick="key(21)" title="Left">◀</button>
-      <button class="d-ok"    onclick="key(23)" title="OK / Select">OK</button>
-      <button class="d-right" onclick="key(22)" title="Right">▶</button>
-      <button class="d-down"  onclick="key(20)" title="Down">▼</button>
+    <div class="dpad" id="dpad">
+      <button class="d-up"    data-key="19" data-repeat aria-label="Up">▲</button>
+      <button class="d-left"  data-key="21" data-repeat aria-label="Left">◀</button>
+      <button class="d-ok"    data-key="23" aria-label="OK / Select">OK</button>
+      <button class="d-right" data-key="22" data-repeat aria-label="Right">▶</button>
+      <button class="d-down"  data-key="20" data-repeat aria-label="Down">▼</button>
+      <div class="swipe-hint">Swipe to move<br>Tap for OK</div>
     </div>
   </div>
 
-  <!-- Back · Home · Recents -->
   <div class="nav-row">
-    <button class="nav-btn" onclick="key(4)"   title="Back">
-      <span>↩</span>
-      <span class="nav-lbl">Back</span>
-    </button>
-    <button class="nav-btn" onclick="key(3)"   title="Home">
-      <span>⌂</span>
-      <span class="nav-lbl">Home</span>
-    </button>
-    <button class="nav-btn" onclick="key(187)" title="Recent Apps">
-      <span>⊡</span>
-      <span class="nav-lbl">Apps</span>
-    </button>
+    <button class="nav-btn surface" data-key="4"   aria-label="Back"><span aria-hidden="true">↩</span><span class="lbl">Back</span></button>
+    <button class="nav-btn surface" data-key="3"   aria-label="Home"><span aria-hidden="true">⌂</span><span class="lbl">Home</span></button>
+    <button class="nav-btn surface" data-key="187" aria-label="Recent apps"><span aria-hidden="true">⊡</span><span class="lbl">Apps</span></button>
   </div>
 
-  <!-- Channel: rocker + numpad -->
-  <div class="ch-row">
-    <div class="ch-pill">
-      <button class="cbtn" title="Channel Up"   onclick="key(166)">▲<span class="ch-lbl">CH</span></button>
-      <button class="cbtn" title="Channel Down" onclick="key(167)">▼<span class="ch-lbl">CH</span></button>
+  <div class="pair-row">
+    <div class="pill">
+      <button data-key="166" data-repeat aria-label="Channel up">▲<span class="lbl">CH</span></button>
+      <button data-key="167" data-repeat aria-label="Channel down">▼<span class="lbl">CH</span></button>
     </div>
-    <button class="numpad-open-btn" title="Enter channel number" onclick="openNumpad()">123</button>
+    <button class="round surface" data-act="numpad" aria-label="Enter channel number">123</button>
   </div>
 
   <div class="divider"></div>
 
-  <!-- Volume -->
-  <div class="vol-row">
-    <div class="vol-pill">
-      <button class="vbtn" title="Volume Down" onclick="key(25)">🔉</button>
-      <button class="vbtn" title="Volume Up"   onclick="key(24)">🔊</button>
+  <div class="pair-row">
+    <div class="pill">
+      <button data-key="25" data-repeat aria-label="Volume down">🔉</button>
+      <button data-key="24" data-repeat aria-label="Volume up">🔊</button>
     </div>
-    <button class="mute-btn" title="Mute / Unmute" onclick="key(164)">🔇</button>
+    <button class="round surface" data-key="164" aria-label="Mute">🔇</button>
   </div>
 
-  <!-- Rewind · Play/Pause · Fast Forward -->
   <div class="media-row">
-    <button class="media-btn"          title="Rewind"        onclick="key(89)">⏪</button>
-    <button class="media-btn playpause" title="Play / Pause"  onclick="key(85)">⏯</button>
-    <button class="media-btn"          title="Fast Forward"   onclick="key(90)">⏩</button>
+    <button class="media-btn surface" data-key="89" data-repeat aria-label="Rewind">⏪</button>
+    <button class="media-btn surface playpause" data-key="85" aria-label="Play / Pause">⏯</button>
+    <button class="media-btn surface" data-key="90" data-repeat aria-label="Fast forward">⏩</button>
   </div>
 
   <div class="divider"></div>
 
-  <!-- App shortcuts -->
-  <div class="apps-row">
-    <button class="app-btn ap-yt" title="YouTube"     onclick="launch('youtube')">▶<br>YouTube</button>
-    <button class="app-btn ap-nf" title="Netflix"     onclick="launch('netflix')">N<br>Netflix</button>
-    <button class="app-btn ap-pv" title="Prime Video" onclick="launch('prime')">prime<br>video</button>
-    <button class="app-btn ap-dp" title="Disney+"     onclick="launch('disney')">✦<br>Disney+</button>
+  <div class="apps-head">
+    <span class="lbl">Apps</span>
+    <button class="link-btn" id="btn-edit-apps" data-act="edit-apps">Edit</button>
   </div>
+  <div class="apps-row" id="apps"></div>
 
+</main>
+
+<p class="kbd-hint">
+  Arrows · Enter=OK · Esc=Back · H=Home · Space=Play/Pause · M=Mute · PgUp/Dn=Volume · T=Type · N=Channel digits
+</p>
+
+<!-- Channel numpad -->
+<div class="sheet-bg" id="sheet-num" data-sheet>
+  <div class="sheet" role="dialog" aria-label="Channel number">
+    <h2>Channel</h2>
+    <div class="numpad" id="numpad"></div>
+    <p class="hint">Tap outside or press Escape to close</p>
+  </div>
 </div>
 
-<div class="kbd-hint">
-  Arrow keys · Enter=OK · Esc=Back · H=Home · Space=Play/Pause · M=Mute · PgUp/Dn=Volume · T=Text · 0–9=Channel (when numpad open)
+<!-- Live typing: every keystroke goes to the field focused on the TV -->
+<div class="sheet-bg" id="sheet-text" data-sheet>
+  <div class="sheet" role="dialog" aria-label="Type on TV">
+    <h2>⌨ Type on TV</h2>
+    <input class="input" id="text-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send"
+           placeholder="Focus a field on the TV, then type…" aria-label="Text to type on the TV">
+    <p class="hint">Sent as you type · Enter submits on the TV · ASCII only</p>
+    <div class="btn-row"><button class="btn primary" data-act="close">Done</button></div>
+  </div>
 </div>
 
-<!-- Numpad modal -->
-<div class="text-modal" id="numpad-modal" onclick="onNumpadBgClick(event)">
-  <div class="text-card">
-    <div class="text-card-title">123 Channel</div>
-    <div class="numpad-grid">
-      <button class="nkey" onclick="numkey(8)">1</button>
-      <button class="nkey" onclick="numkey(9)">2</button>
-      <button class="nkey" onclick="numkey(10)">3</button>
-      <button class="nkey" onclick="numkey(11)">4</button>
-      <button class="nkey" onclick="numkey(12)">5</button>
-      <button class="nkey" onclick="numkey(13)">6</button>
-      <button class="nkey" onclick="numkey(14)">7</button>
-      <button class="nkey" onclick="numkey(15)">8</button>
-      <button class="nkey" onclick="numkey(16)">9</button>
-      <button class="nkey nkey-zero" onclick="numkey(7)">0</button>
+<!-- App editor -->
+<div class="sheet-bg" id="sheet-app" data-sheet>
+  <div class="sheet" role="dialog" aria-label="Edit app button">
+    <h2 id="ed-title">App button</h2>
+    <div id="ed-presets-wrap"><p class="hint" style="margin-bottom:8px">Presets</p><div class="chips" id="ed-presets"></div></div>
+    <div id="ed-seen-wrap" hidden><p class="hint" style="margin-bottom:8px">Seen on your TV</p><div class="chips" id="ed-seen"></div></div>
+    <label class="field">Name<input class="input" id="ed-label" maxlength="12" autocomplete="off" autocapitalize="words"></label>
+    <label class="field">Package name<input class="input" id="ed-target" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="com.example.app"></label>
+    <div class="swatches" id="ed-colors" role="group" aria-label="Colour"></div>
+    <div class="err-text" id="ed-err" role="alert"></div>
+    <div class="btn-row" id="ed-move">
+      <button class="btn" data-act="app-left" aria-label="Move earlier">◀ Move</button>
+      <button class="btn" data-act="app-right" aria-label="Move later">Move ▶</button>
+      <button class="btn danger" data-act="app-delete">Delete</button>
     </div>
-    <div class="text-hint">Tap outside or Escape to close</div>
-  </div>
-</div>
-
-<!-- Text input modal -->
-<div class="text-modal" id="text-modal" onclick="onModalBgClick(event)">
-  <div class="text-card">
-    <div class="text-card-title">⌨ Type Text</div>
-    <input
-      class="text-input"
-      id="text-input"
-      type="text"
-      placeholder="Focus a field on TV first, then type here…"
-      autocomplete="off"
-      spellcheck="false"
-    >
-    <div class="text-actions">
-      <button class="text-cancel" onclick="closeTextModal()">Cancel</button>
-      <button class="text-send"   onclick="submitText()">Send to TV ↵</button>
+    <div class="btn-row">
+      <button class="btn" data-act="close">Cancel</button>
+      <button class="btn primary" data-act="app-save">Save</button>
     </div>
-    <div class="text-hint">Enter to send · Escape to cancel · ASCII only</div>
   </div>
 </div>
 
-<div id="toast"></div>
+<!-- Remote settings + About -->
+<div class="sheet-bg" id="sheet-set" data-sheet>
+  <div class="sheet" role="dialog" aria-label="Remote settings">
+    <h2>Remote settings</h2>
+    <label class="sw">Left-handed layout <input type="checkbox" data-pref="left"></label>
+    <label class="sw">Swipe pad (D-pad as trackpad) <input type="checkbox" data-pref="swipe"></label>
+    <label class="sw">Haptic feedback <input type="checkbox" data-pref="haptics"></label>
+    <button class="btn" data-act="reset-apps">Reset app buttons</button>
+    <div class="btn-row"><button class="btn primary" data-act="close">Done</button></div>
+    <p class="hint" id="about"></p>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
-const BASE = '';   // same origin (Flask serves this page)
-let toastTimer = null;
+'use strict';
 
+// ═══ About ═════════════════════════════════════════════════════════════════════
+const APP_INFO = { version: '1.8', built: '2026-11-26 11:23 EST' };
+
+// ═══ Helpers ═══════════════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+const root = document.documentElement;
+const el = (tag, props = {}) => Object.assign(document.createElement(tag), props);
+
+const store = {
+  get(k, fallback) { try { return JSON.parse(localStorage.getItem(k)) ?? fallback; } catch { return fallback; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode: not persisted */ } },
+};
+
+// ═══ Network ═══════════════════════════════════════════════════════════════════
+async function api(path, { method = 'POST', json } = {}) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 6000);
+  try {
+    const r = await fetch(path, {
+      method, signal: ctl.signal,
+      ...(json && { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(json) }),
+    });
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+
+let toastTimer;
 function toast(msg, isError = false) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = 'show' + (isError ? ' err' : '');
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' err' : '');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.className = ''; }, 2200);
+  toastTimer = setTimeout(() => { t.className = 'toast'; }, 2200);
 }
 
-async function key(code) {
+function banner(msg) {
+  $('banner').hidden = !msg;
+  if (msg) $('banner-msg').textContent = msg;
+}
+
+/** POST an action; toast failures. Resolves to true on success. */
+async function act(path, opts, okMsg) {
   try {
-    const r = await fetch(`${BASE}/api/key/${code}`, { method: 'POST' });
-    const d = await r.json();
-    if (!d.ok) toast(d.error || 'Error', true);
-  } catch (e) {
+    const d = await api(path, opts);
+    if (d.ok) { if (okMsg) toast(okMsg); return true; }
+    toast(d.error || 'Error', true);
+  } catch {
     toast('Server unreachable', true);
+    banner('Can’t reach the remote server.');
   }
+  return false;
 }
 
-async function assistant() {
-  try {
-    const r = await fetch(`${BASE}/api/assistant`, { method: 'POST' });
-    const d = await r.json();
-    if (!d.ok) toast(d.error || 'Error', true);
-  } catch (e) {
-    toast('Server unreachable', true);
-  }
+const sendKey = code => act(`/api/key/${code}`);
+
+// ═══ Preferences & theme ═══════════════════════════════════════════════════════
+const prefs = { theme: 'auto', left: false, swipe: false, haptics: true, ...store.get('tvr.prefs', {}) };
+const savePrefs = () => store.set('tvr.prefs', prefs);
+const THEMES = ['auto', 'light', 'dark'];
+const THEME_ICON = { auto: '◐', light: '☀', dark: '☾' };
+const lightQuery = matchMedia('(prefers-color-scheme: light)');
+
+function applyTheme() {
+  const t = prefs.theme === 'auto' ? (lightQuery.matches ? 'light' : 'dark') : prefs.theme;
+  root.dataset.theme = t;
+  document.querySelector('meta[name=theme-color]').content = t === 'light' ? '#eef0f5' : '#0a0a0c';
+  $('btn-theme').textContent = THEME_ICON[prefs.theme];
+  $('btn-theme').setAttribute('aria-label', `Theme: ${prefs.theme}. Tap to change`);
+}
+lightQuery.addEventListener('change', () => { if (prefs.theme === 'auto') applyTheme(); });
+
+function applyPrefs() {
+  root.dataset.hand = prefs.left ? 'left' : 'right';
+  root.dataset.swipe = prefs.swipe ? '1' : '0';
+  applyTheme();
+  document.querySelectorAll('[data-pref]').forEach(i => { i.checked = !!prefs[i.dataset.pref]; });
 }
 
-async function launch(app) {
-  try {
-    const r = await fetch(`${BASE}/api/launch/${app}`, { method: 'POST' });
-    const d = await r.json();
-    if (d.ok) toast(`Opening ${app}`);
-    else toast(d.error || 'Launch failed', true);
-  } catch (e) {
-    toast('Server unreachable', true);
-  }
+const buzz = () => { if (prefs.haptics && navigator.vibrate) navigator.vibrate(8); };
+
+// ═══ Remote keys: tap, hold-to-repeat, swipe pad ═══════════════════════════════
+// Plain taps fire on pointerup (so starting a scroll over a button never sends a key);
+// buttons marked data-repeat also auto-repeat while held.
+const HOLD_MS = 380, REPEAT_MS = 110;
+const remote = $('remote');
+let press = null;
+
+function endPress() {
+  if (!press) return;
+  clearTimeout(press.hold); clearInterval(press.rep);
+  press = null;
 }
 
-// Human-readable app names
+remote.addEventListener('pointerdown', e => {
+  const btn = e.target.closest('[data-key]');
+  if (!btn || e.button > 0) return;
+  endPress();
+  const p = press = { btn, fired: false, busy: false };
+  if (btn.hasAttribute('data-repeat')) {
+    p.hold = setTimeout(() => {
+      p.fired = true;
+      const tick = () => { if (p.busy) return; p.busy = true; buzz(); sendKey(btn.dataset.key).finally(() => { p.busy = false; }); };
+      tick();
+      p.rep = setInterval(tick, REPEAT_MS);
+    }, HOLD_MS);
+  }
+});
+document.addEventListener('pointerup', e => {
+  // A clicked button keeps focus and would swallow the next Space/Enter shortcut.
+  if (e.pointerType === 'mouse' && document.activeElement?.tagName === 'BUTTON') document.activeElement.blur();
+  const p = press;
+  if (!p) return;
+  endPress();
+  if (!p.fired && e.target.closest?.('[data-key]') === p.btn) { buzz(); sendKey(p.btn.dataset.key); }
+});
+['pointercancel', 'blur'].forEach(ev => (ev === 'blur' ? window : document).addEventListener(ev, endPress));
+remote.addEventListener('contextmenu', e => e.preventDefault());
+// Keyboard activation (Enter/Space on a focused button) arrives as a click with detail 0.
+remote.addEventListener('click', e => {
+  const btn = e.target.closest('[data-key]');
+  if (btn && e.detail === 0) sendKey(btn.dataset.key);
+});
+
+// Swipe pad: a key per STEP px travelled along the dominant axis; a tap is OK.
+(function swipePad() {
+  const STEP = 34, TAP = 12;
+  let s = null;
+  const pad = $('dpad');
+  pad.addEventListener('pointerdown', e => {
+    if (!prefs.swipe) return;
+    pad.setPointerCapture(e.pointerId);
+    s = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, moved: false };
+  });
+  pad.addEventListener('pointermove', e => {
+    if (!s) return;
+    const dx = e.clientX - s.x, dy = e.clientY - s.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < STEP) return;
+    const horiz = Math.abs(dx) > Math.abs(dy);
+    sendKey(horiz ? (dx > 0 ? 22 : 21) : (dy > 0 ? 20 : 19));
+    buzz();
+    s.x = e.clientX; s.y = e.clientY; s.moved = true;
+  });
+  const end = e => {
+    if (!s) return;
+    const tap = !s.moved && Math.hypot(e.clientX - s.x0, e.clientY - s.y0) < TAP;
+    s = null;
+    if (tap && e.type === 'pointerup') { buzz(); sendKey(23); }
+  };
+  pad.addEventListener('pointerup', end);
+  pad.addEventListener('pointercancel', end);
+})();
+
+// ═══ Sheets ════════════════════════════════════════════════════════════════════
+const openSheets = [];
+function openSheet(id) { $(id).classList.add('open'); openSheets.push(id); }
+function closeSheet() {
+  const id = openSheets.pop();
+  if (!id) return;
+  $(id).classList.remove('open');
+  if (id === 'sheet-text') { $('text-input').blur(); typed = ''; $('text-input').value = ''; }
+  if (id === 'sheet-app') editIdx = null;
+}
+
+// ═══ Numpad ════════════════════════════════════════════════════════════════════
+const NUM_KEYS = { 0: 7, 1: 8, 2: 9, 3: 10, 4: 11, 5: 12, 6: 13, 7: 14, 8: 15, 9: 16 };
+$('numpad').replaceChildren(...[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(n => {
+  const b = el('button', { className: 'nkey' + (n === 0 ? ' nkey-zero' : ''), textContent: n });
+  b.dataset.num = n;
+  return b;
+}));
+
+// ═══ Live typing ═══════════════════════════════════════════════════════════════
+let typed = '';
+let typeQueue = Promise.resolve();
+const enqueue = fn => { typeQueue = typeQueue.then(fn).catch(() => {}); };
+const KEY_DEL = 67, KEY_ENTER = 66;
+
+$('text-input').addEventListener('input', e => {
+  const input = e.target;
+  let v = input.value;
+  const ascii = v.replace(/[^\x00-\x7F]/g, '');
+  if (ascii !== v) { v = input.value = ascii; toast('ASCII characters only'); }
+  let i = 0;                                   // diff against what the TV already has
+  while (i < typed.length && i < v.length && typed[i] === v[i]) i++;
+  const del = typed.length - i, add = v.slice(i);
+  typed = v;
+  if (del) enqueue(async () => { for (let n = 0; n < del; n++) await sendKey(KEY_DEL); });
+  if (add) enqueue(() => act('/api/text', { json: { text: add } }));
+});
+$('text-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); enqueue(() => sendKey(KEY_ENTER)); closeSheet(); }
+});
+
+// ═══ App buttons (customisable) ════════════════════════════════════════════════
+const COLORS = ['#e50914', '#cc0000', '#c2410c', '#d97706', '#1db954', '#0d9488', '#0073a8', '#1434cb', '#6d28d9', '#be185d', '#475569'];
+const PRESETS = [
+  { label: 'YouTube',   target: 'youtube', color: '#cc0000' },
+  { label: 'Netflix',   target: 'netflix', color: '#e50914' },
+  { label: 'Prime',     target: 'prime',   color: '#0073a8' },
+  { label: 'Disney+',   target: 'disney',  color: '#1434cb' },
+  { label: 'Spotify',   target: 'spotify', color: '#1db954' },
+  { label: 'Kodi',      target: 'kodi',    color: '#0d9488' },
+  { label: 'Plex',      target: 'com.plexapp.android',     color: '#d97706' },
+  { label: 'HBO Max',   target: 'com.hbo.hbonow',          color: '#6d28d9' },
+  { label: 'VLC',       target: 'org.videolan.vlc',        color: '#c2410c' },
+  { label: 'Twitch',    target: 'tv.twitch.android.app',   color: '#6d28d9' },
+];
+const DEFAULT_APPS = PRESETS.slice(0, 6);
+const TARGET_RE = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)*$/;   // built-in key or package id
+
+const withId = a => ({ id: Math.random().toString(36).slice(2, 9), ...a });
+let apps = store.get('tvr.apps', null) || DEFAULT_APPS.map(withId);
+let editing = false;
+let editIdx = null;          // null = closed, -1 = new, >=0 = index being edited
+let editColor = COLORS[0];
+const saveApps = () => store.set('tvr.apps', apps);
+
+function renderApps() {
+  const row = $('apps');
+  row.classList.toggle('editing', editing);
+  $('btn-edit-apps').textContent = editing ? 'Done' : 'Edit';
+  const tiles = apps.map((a, i) => {
+    const b = el('button', { className: 'app-btn' });
+    b.dataset.app = i;
+    b.style.setProperty('--c', a.color);
+    b.setAttribute('aria-label', (editing ? 'Edit ' : 'Open ') + a.label);
+    b.append(el('b', { textContent: a.label.charAt(0).toUpperCase() }), el('span', { textContent: a.label }));
+    return b;
+  });
+  if (editing) {
+    const add = el('button', { className: 'app-btn app-add', textContent: '+' });
+    add.dataset.app = -1;
+    add.setAttribute('aria-label', 'Add app button');
+    tiles.push(add);
+  }
+  row.replaceChildren(...tiles);
+}
+
+// Packages seen in the foreground while polling: a way to discover package names.
+const SKIP_SEEN = /launcher|settings|initsetup|systemui|inputmethod|googlequicksearchbox/i;
+let seen = store.get('tvr.seen', []);
+function noteSeen(pkg) {
+  if (!pkg || SKIP_SEEN.test(pkg) || seen.includes(pkg)) return;
+  seen = [pkg, ...seen].slice(0, 6);
+  store.set('tvr.seen', seen);
+}
+
+function chip(text, onClick) {
+  const c = el('button', { className: 'chip', textContent: text });
+  c.addEventListener('click', onClick);
+  return c;
+}
+
+function fillEditor(a) {
+  $('ed-label').value = a.label;
+  $('ed-target').value = a.target;
+  setEditColor(a.color);
+  $('ed-err').textContent = '';
+}
+function setEditColor(c) {
+  editColor = c;
+  $('ed-colors').querySelectorAll('.swatch').forEach(s => s.setAttribute('aria-pressed', s.dataset.c === c));
+}
+$('ed-colors').replaceChildren(...COLORS.map(c => {
+  const s = el('button', { className: 'swatch', type: 'button' });
+  s.dataset.c = c; s.style.setProperty('--c', c);
+  s.setAttribute('aria-label', 'Colour ' + c);
+  s.addEventListener('click', () => setEditColor(c));
+  return s;
+}));
+
+function openEditor(i) {
+  editIdx = i;
+  const isNew = i < 0;
+  $('ed-title').textContent = isNew ? 'Add app' : 'Edit app';
+  $('ed-move').hidden = isNew;
+  $('ed-presets-wrap').hidden = !isNew;
+  $('ed-presets').replaceChildren(...PRESETS.map(p => chip(p.label, () => fillEditor(p))));
+  const known = new Set(apps.map(a => a.target));
+  const fresh = seen.filter(p => !known.has(p));
+  $('ed-seen-wrap').hidden = !isNew || !fresh.length;
+  $('ed-seen').replaceChildren(...fresh.map(p => chip(APP_LABELS[p] || p.split('.').pop(), () => {
+    fillEditor({ label: (APP_LABELS[p] || p.split('.').pop()).slice(0, 12), target: p, color: editColor }); })));
+  fillEditor(isNew ? { label: '', target: '', color: COLORS[7] } : apps[i]);
+  openSheet('sheet-app');
+}
+
+function saveEditor() {
+  const label = $('ed-label').value.trim(), target = $('ed-target').value.trim();
+  const err = !label ? 'Give it a name.' : !TARGET_RE.test(target) ? 'Package names look like com.example.app.' : '';
+  $('ed-err').textContent = err;
+  if (err) return;
+  const a = { label, target, color: editColor };
+  if (editIdx < 0) apps.push(withId(a)); else apps[editIdx] = { ...apps[editIdx], ...a };
+  saveApps(); renderApps(); closeSheet();
+}
+
+function moveApp(d) {
+  const j = editIdx + d;
+  if (j < 0 || j >= apps.length) return;
+  [apps[editIdx], apps[j]] = [apps[j], apps[editIdx]];
+  editIdx = j; saveApps(); renderApps();
+}
+
+/** Two-step button: first tap arms it, second tap within 3s runs it. */
+function confirmTap(btn, fn) {
+  if (btn.dataset.armed) { clearTimeout(+btn.dataset.armed); delete btn.dataset.armed; btn.textContent = btn.dataset.text; fn(); return; }
+  btn.dataset.text = btn.textContent;
+  btn.textContent = 'Tap again to confirm';
+  btn.dataset.armed = setTimeout(() => { delete btn.dataset.armed; btn.textContent = btn.dataset.text; }, 3000);
+}
+
+// Long-press on an app button opens its editor; a normal tap launches the app.
+let appHold = null, appHoldFired = false;
+$('apps').addEventListener('pointerdown', e => {
+  const b = e.target.closest('[data-app]');
+  appHoldFired = false;
+  if (!b || +b.dataset.app < 0) return;
+  appHold = setTimeout(() => { appHoldFired = true; buzz(); openEditor(+b.dataset.app); }, 550);
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => $('apps').addEventListener(ev, () => clearTimeout(appHold)));
+$('apps').addEventListener('contextmenu', e => e.preventDefault());
+
+function onAppTap(i) {
+  if (appHoldFired) { appHoldFired = false; return; }
+  if (editing) return openEditor(i);
+  const a = apps[i];
+  buzz();
+  act(`/api/launch/${encodeURIComponent(a.target)}`, {}, `Opening ${a.label}`);
+}
+
+// ═══ Status polling ════════════════════════════════════════════════════════════
 const APP_LABELS = {
   'com.google.android.youtube.tv': 'YouTube',
   'com.netflix.ninja': 'Netflix',
   'com.amazon.amazonvideo.livingroom': 'Prime Video',
   'com.disney.disneyplus': 'Disney+',
   'com.android.settings': 'Settings',
+  'com.android.tv.settings': 'Settings',
   'org.xbmc.kodi': 'Kodi',
   'com.spotify.tv.android': 'Spotify',
-  'com.android.tv.settings': 'Settings',
   'com.tcl.initsetup': 'TCL Home',
 };
+const POLL_MS = 5000, POLL_MAX_MS = 60000;
+let pollTimer = null, failures = 0, tick = 0;
 
-async function pollState() {
+function setStatus(ok, app, screen) {
+  $('status-bar').classList.toggle('offline', !ok);
+  $('status-app').textContent = ok ? (APP_LABELS[app] || app || '—') : app;
+  $('status-screen').textContent = ok && screen ? (screen === 'ON' ? '· On' : '· Off') : '';
+}
+
+async function refresh() {
+  let ok = false;
   try {
-    const r = await fetch(`${BASE}/api/state`);
-    const d = await r.json();
-    const bar = document.getElementById('status-bar');
-    const appEl = document.getElementById('status-app');
-    const scrEl = document.getElementById('status-screen');
-    if (d.ok) {
-      bar.className = 'status-bar';
-      appEl.textContent = APP_LABELS[d.app] || d.app || '—';
-      scrEl.textContent = d.screen === 'ON' ? '· On' : '· Off';
-    } else {
-      bar.className = 'status-bar offline';
-      appEl.textContent = 'Disconnected';
-      scrEl.textContent = '';
-    }
-  } catch (e) {
-    document.getElementById('status-bar').className = 'status-bar offline';
-    document.getElementById('status-app').textContent = 'Server offline';
-    document.getElementById('status-screen').textContent = '';
+    const d = await api('/api/state', { method: 'GET' });
+    ok = !!d.ok;
+    if (ok) { setStatus(true, d.app, d.screen); noteSeen(d.app); banner(null); }
+    else { setStatus(false, 'Disconnected'); banner('The TV isn’t reachable over ADB. Check USB debugging.'); }
+  } catch {
+    setStatus(false, 'Server offline');
+    banner('Can’t reach the remote server.');
   }
-}
-
-// ─── Text modal ───
-function openTextModal() {
-  document.getElementById('text-modal').classList.add('open');
-  setTimeout(() => document.getElementById('text-input').focus(), 60);
-}
-
-function closeTextModal() {
-  document.getElementById('text-modal').classList.remove('open');
-  document.getElementById('text-input').value = '';
-}
-
-function onModalBgClick(e) {
-  if (e.target === document.getElementById('text-modal')) closeTextModal();
-}
-
-async function submitText() {
-  const text = document.getElementById('text-input').value;
-  if (!text.trim()) { closeTextModal(); return; }
-  closeTextModal();
-  try {
-    const r = await fetch(`${BASE}/api/text`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
-    const d = await r.json();
-    if (d.ok) toast(`Sent: ${text.length > 20 ? text.slice(0, 20) + '…' : text}`);
-    else toast(d.error || 'Send failed', true);
-  } catch (e) {
-    toast('Server unreachable', true);
+  if (tick++ % 2 === 0) {                       // ADB dot at half the state rate
+    api('/api/adb', { method: 'GET' })
+      .then(d => { $('adb-dot').className = d.connected ? 'ok' : 'err'; $('adb-dot').title = d.connected ? 'ADB: connected' : 'ADB: not connected'; })
+      .catch(() => { $('adb-dot').className = ''; });
   }
+  return ok;
 }
 
-// ─── Numpad modal ───
-function openNumpad() {
-  document.getElementById('numpad-modal').classList.add('open');
+/** Self-scheduling (never overlaps), backs off while failing, idle while the tab is hidden. */
+async function poll() {
+  clearTimeout(pollTimer);
+  if (document.hidden) return;
+  failures = (await refresh()) ? 0 : Math.min(failures + 1, 6);
+  pollTimer = setTimeout(poll, Math.min(POLL_MS * 2 ** failures, POLL_MAX_MS));
 }
-function closeNumpad() {
-  document.getElementById('numpad-modal').classList.remove('open');
-}
-function onNumpadBgClick(e) {
-  if (e.target === document.getElementById('numpad-modal')) closeNumpad();
-}
-async function numkey(code) {
-  await key(code);
-}
+document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(pollTimer); endPress(); } else poll(); });
 
-// Keyboard shortcuts
-const KB = {
-  ArrowUp: 19, ArrowDown: 20, ArrowLeft: 21, ArrowRight: 22,
-  Enter: 23, Escape: 4,
-  ' ': 85,     // Space → Play/Pause
-  h: 3,        // H → Home
-  H: 3,
-  m: 164,      // M → Mute
-  M: 164,
-  PageUp: 24,  // PgUp → Vol+
-  PageDown: 25,// PgDn → Vol-
-};
-
-const NUMKEYS = { '0':7,'1':8,'2':9,'3':10,'4':11,'5':12,'6':13,'7':14,'8':15,'9':16 };
-
-document.addEventListener('keydown', e => {
-  const modal = document.getElementById('text-modal');
-  const numpad = document.getElementById('numpad-modal');
-
-  // Inside the text modal: Enter sends, Escape closes
-  if (modal.classList.contains('open')) {
-    if (e.key === 'Enter') { e.preventDefault(); submitText(); }
-    if (e.key === 'Escape') { e.preventDefault(); closeTextModal(); }
-    return;
-  }
-
-  // Inside the numpad modal: digits fire, Escape closes
-  if (numpad.classList.contains('open')) {
-    if (e.key === 'Escape') { e.preventDefault(); closeNumpad(); }
-    if (e.key in NUMKEYS) { e.preventDefault(); numkey(NUMKEYS[e.key]); }
-    return;
-  }
-
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
-  // T → open text modal
-  if (e.key === 't' || e.key === 'T') { e.preventDefault(); openTextModal(); return; }
-
-  if (e.key in KB) {
-    e.preventDefault();
-    key(KB[e.key]);
-  }
-});
-
-// Load TV name/IP and set headline
 async function loadConfig() {
   try {
-    const r = await fetch(`${BASE}/api/config`);
-    const d = await r.json();
-    if (d.name || d.host) {
-      document.getElementById('headline').textContent =
-        [d.name, d.host].filter(Boolean).join(' · ');
-      document.title = d.name ? `${d.name} Remote` : 'TV Remote';
-    }
-  } catch (_) {}
+    const d = await api('/api/config', { method: 'GET' });
+    if (d.name || d.host) $('headline').textContent = [d.name, d.host].filter(Boolean).join(' · ');
+    document.title = d.name ? `${d.name} Remote` : 'TV Remote';
+  } catch { /* the banner from refresh() covers it */ }
 }
 
-// Poll ADB loopback status (only relevant when served by on-device APK)
-async function pollAdb() {
-  try {
-    const r = await fetch(`${BASE}/api/adb`);
-    const d = await r.json();
-    const dot = document.getElementById('adb-dot');
-    dot.className = d.connected ? 'ok' : 'err';
-    dot.title = d.connected ? 'ADB: connected' : 'ADB: not connected';
-  } catch (_) {
-    document.getElementById('adb-dot').className = '';
-  }
-}
+// ═══ Event wiring (delegated) ══════════════════════════════════════════════════
+const ACTIONS = {
+  settings: () => openSheet('sheet-set'),
+  theme: () => { prefs.theme = THEMES[(THEMES.indexOf(prefs.theme) + 1) % THEMES.length]; savePrefs(); applyTheme(); toast(`Theme: ${prefs.theme}`); },
+  retry: () => { banner(null); failures = 0; poll(); },
+  assistant: () => act('/api/assistant'),
+  numpad: () => openSheet('sheet-num'),
+  text: () => { typed = ''; openSheet('sheet-text'); setTimeout(() => $('text-input').focus(), 60); },
+  close: closeSheet,
+  'edit-apps': () => { editing = !editing; renderApps(); },
+  'app-save': saveEditor,
+  'app-left': () => moveApp(-1),
+  'app-right': () => moveApp(1),
+  'app-delete': e => confirmTap(e.target, () => { apps.splice(editIdx, 1); saveApps(); renderApps(); closeSheet(); }),
+  'reset-apps': e => confirmTap(e.target, () => { apps = DEFAULT_APPS.map(withId); saveApps(); renderApps(); toast('App buttons reset'); }),
+};
 
-// Boot
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (t.classList?.contains('sheet-bg')) return closeSheet();                 // backdrop
+  const num = t.closest('[data-num]');
+  if (num) return sendKey(NUM_KEYS[num.dataset.num]);
+  const app = t.closest('[data-app]');
+  if (app) { const i = +app.dataset.app; return i < 0 ? openEditor(-1) : onAppTap(i); }
+  const a = t.closest('[data-act]');
+  if (a && ACTIONS[a.dataset.act]) ACTIONS[a.dataset.act]({ target: a });
+});
+
+document.addEventListener('change', e => {
+  const k = e.target.dataset?.pref;
+  if (!k) return;
+  prefs[k] = e.target.checked; savePrefs(); applyPrefs();
+});
+
+// Keyboard shortcuts (desktop)
+const KB = {
+  ArrowUp: 19, ArrowDown: 20, ArrowLeft: 21, ArrowRight: 22, Enter: 23, Escape: 4,
+  ' ': 85, h: 3, H: 3, m: 164, M: 164, PageUp: 24, PageDown: 25,
+};
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && openSheets.length) { e.preventDefault(); return closeSheet(); }
+  if (openSheets.at(-1) === 'sheet-num' && e.key in NUM_KEYS) { e.preventDefault(); return sendKey(NUM_KEYS[e.key]); }
+  if (openSheets.length || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+  if (e.target.tagName === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return;   // let the focused button activate
+  if (e.key === 't' || e.key === 'T') { e.preventDefault(); return ACTIONS.text(); }
+  if (e.key === 'n' || e.key === 'N') { e.preventDefault(); return ACTIONS.numpad(); }
+  if (e.key in KB) { e.preventDefault(); sendKey(KB[e.key]); }
+});
+
+// ═══ Add to Home Screen ════════════════════════════════════════════════════════
+// Runtime manifest so start_url is this page's real address (the TV's IP and port).
+// Over plain http browsers add a shortcut rather than an installable app.
+(function manifest() {
+  const icon = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" rx="22" fill="#1c2340"/><rect x="30" y="14" width="36" height="68" rx="18" fill="#2a2a2e" stroke="#4285f4" stroke-width="3"/><circle cx="48" cy="40" r="9" fill="#4285f4"/></svg>');
+  const m = { name: 'TV Remote', short_name: 'Remote', start_url: location.href, display: 'standalone',
+              background_color: '#0a0a0c', theme_color: '#0a0a0c', icons: [{ src: icon, sizes: 'any', type: 'image/svg+xml' }] };
+  const link = el('link', { rel: 'manifest', href: URL.createObjectURL(new Blob([JSON.stringify(m)], { type: 'application/manifest+json' })) });
+  document.head.append(link);
+})();
+
+// ═══ Boot ══════════════════════════════════════════════════════════════════════
+document.querySelectorAll('[aria-label]:not([title])').forEach(n => { n.title = n.getAttribute('aria-label'); });
+$('about').textContent = `TV Remote v${APP_INFO.version} · built ${APP_INFO.built}`;
+applyPrefs();
+renderApps();
 loadConfig();
-pollState();
-pollAdb();
-setInterval(pollState, 5000);
-setInterval(pollAdb, 10000);
+poll();
 </script>
 </body>
 </html>

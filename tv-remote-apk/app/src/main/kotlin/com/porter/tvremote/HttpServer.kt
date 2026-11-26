@@ -42,6 +42,7 @@ class HttpServer(
     companion object {
         private const val TAG = "HttpServer"
         private const val HOST = "0.0.0.0"
+        private const val STATE_TTL_NANOS = 2_000_000_000L
 
         /**
          * Ktor CIO binds asynchronously, so detect an occupied port before starting it.
@@ -109,19 +110,22 @@ class HttpServer(
         // to Ktor's ApplicationCall, which shadows the outer Android Context field.
         val androidContext = this@HttpServer.context
 
+        // The page and the model name never change while the server runs: read them once,
+        // not from the asset store / an ADB shell on every request.
+        val indexHtml by lazy {
+            androidContext.assets.open("index.html").bufferedReader().use { it.readText() }
+        }
+
         // ── Static UI ──────────────────────────────────────────────────────────
 
         get("/") {
-            val html = androidContext.assets.open("index.html").bufferedReader().readText()
-            call.respondText(html, ContentType.Text.Html)
+            call.respondText(indexHtml, ContentType.Text.Html)
         }
 
         // ── Config ────────────────────────────────────────────────────────────
 
         get("/api/config") {
-            val name = try {
-                adb.shell("getprop ro.product.model").trim()
-            } catch (_: Exception) { "TV Remote" }
+            val name = modelName()
             val host = getLanIp()
             call.respond(ConfigResult(name = name, host = host, port = AdbController.ADB_PORT))
         }
@@ -176,9 +180,7 @@ class HttpServer(
 
         get("/api/state") {
             try {
-                val screen = adb.screenState()
-                val app    = adb.currentApp()
-                call.respond(StateResult(ok = true, screen = screen, app = app))
+                call.respond(cachedState())
             } catch (e: Exception) {
                 Log.w(TAG, "State query failed: ${e.message}")
                 call.respond(HttpStatusCode.InternalServerError,
@@ -187,10 +189,37 @@ class HttpServer(
         }
     }
 
+    // State is polled by every open page. Serve one ADB read to all of them within the TTL
+    // (O(clients) dumpsys calls per interval -> O(1)); the lock also stops two polls that
+    // arrive together from both running the slow shell command.
+    @Volatile private var model: String? = null
+
+    /** Cached after the first successful read; a failure (ADB not ready yet) is retried. */
+    private fun modelName(): String = model ?: try {
+        adb.shell("getprop ro.product.model").trim().also { model = it }
+    } catch (_: Exception) { "TV Remote" }
+
+    private val stateLock = Any()
+    private var stateCache: StateResult? = null
+    private var stateAtNanos = 0L
+
+    private fun cachedState(): StateResult = synchronized(stateLock) {
+        val now = System.nanoTime()
+        stateCache?.takeIf { now - stateAtNanos < STATE_TTL_NANOS }?.let { return it }
+        val s = adb.tvState()
+        StateResult(ok = true, screen = s.screen, app = s.app).also {
+            stateCache = it
+            stateAtNanos = now
+        }
+    }
+
+    private fun invalidateState() = synchronized(stateLock) { stateCache = null }
+
     /** Execute an ADB action and respond with ApiResult JSON. */
     private suspend fun adbCall(call: ApplicationCall, action: () -> Unit) {
         try {
             action()
+            invalidateState()  // the action probably changed what /api/state would report
             call.respond(ApiResult(ok = true))
         } catch (e: Exception) {
             Log.w(TAG, "ADB call failed: ${e.message}")

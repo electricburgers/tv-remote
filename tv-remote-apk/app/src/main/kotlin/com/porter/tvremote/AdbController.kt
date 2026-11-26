@@ -188,19 +188,32 @@ class AdbController(private val context: Context) {
         }
     }
 
-    fun screenState(): String {
-        val result = shell("dumpsys power | grep 'Display Power'")
-        return if ("state=ON" in result) "ON" else "OFF"
+    /** Screen power state and foreground package, read in ONE shell round-trip. */
+    data class TvState(val screen: String, val app: String)
+
+    /**
+     * Both values in a single command: one lock acquisition and one ADB stream instead of
+     * two, which halves how long a poll can delay a key press waiting on the same lock.
+     */
+    fun tvState(): TvState {
+        val lines = shell(
+            "dumpsys power | grep 'Display Power'; " +
+                "dumpsys activity activities | grep mResumedActivity"
+        ).lineSequence()
+        val power = lines.firstOrNull { "Display Power" in it }.orEmpty()
+        val resumed = lines.firstOrNull { "mResumedActivity" in it }.orEmpty()
+        return TvState(
+            screen = if ("state=ON" in power) "ON" else "OFF",
+            app = parseResumedPackage(resumed),
+        )
     }
 
-    fun currentApp(): String {
-        val result = shell("dumpsys activity activities | grep mResumedActivity")
-        return try {
-            result.split("u0 ").last().trim().split("/")[0]
-        } catch (_: Exception) {
-            result.trim()
-        }
-    }
+    fun screenState(): String = tvState().screen
+
+    fun currentApp(): String = tvState().app
+
+    private fun parseResumedPackage(line: String): String =
+        line.split("u0 ").last().trim().split("/")[0]
 
     /**
      * Send text to the currently focused input field using ANSI-C quoting so that

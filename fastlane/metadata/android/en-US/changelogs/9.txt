@@ -1,0 +1,1 @@
+v1.8: Redesigned web remote: light/dark/auto theme, customizable app buttons (long-press to edit), hold-to-repeat, optional swipe pad, live typing, left-handed layout. Double-tap no longer zooms. The server caches the page and reads TV state in one ADB call.
