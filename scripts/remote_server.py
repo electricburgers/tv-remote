@@ -18,6 +18,11 @@ app = Flask(__name__, static_folder=STATIC)
 _tv: TVClient | None = None
 _lock = threading.Lock()
 
+# /api/state is polled by every open page. One ADB read is shared by all of them
+# within the TTL, so TV traffic per interval is O(1) in the number of pages, not O(n).
+STATE_TTL = 2.0  # seconds
+_state_cache: tuple[float, dict, int] | None = None  # (expires_at, body, status)
+
 APPS = {
     'youtube':  'com.google.android.youtube.tv/com.google.android.apps.youtube.tv.activity.ShellActivity',
     'netflix':  'com.netflix.ninja/.MainActivity',
@@ -47,6 +52,49 @@ def drop_tv():
     _tv = None
 
 
+def run_action(action):
+    """Run action(tv) under the ADB lock and return the API response."""
+    global _state_cache
+    with _lock:
+        # The action probably changes what /api/state would report.  Cleared
+        # before it runs, so polls arriving meanwhile wait for a fresh read.
+        _state_cache = None
+        try:
+            action(get_tv())
+            return jsonify({'ok': True})
+        except Exception as e:
+            drop_tv()
+            return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+def fresh_state():
+    cached = _state_cache  # read once: another thread may clear the global
+    if cached and time.monotonic() < cached[0]:
+        return cached[1], cached[2]
+    return None
+
+
+def read_state():
+    """Return (body, status) for /api/state, reading the TV at most once per TTL."""
+    global _state_cache
+    hit = fresh_state()  # fast path: no waiting on the ADB lock
+    if hit:
+        return hit
+    with _lock:
+        hit = fresh_state()  # another poll may have filled it while we waited
+        if hit:
+            return hit
+        try:
+            tv = get_tv()
+            body, status = {'ok': True, 'screen': tv.screen_state(), 'app': tv.current_app()}, 200
+        except Exception as e:
+            # Cached too: otherwise, with the TV offline, each queued poll would
+            # sit through its own connect timeouts one after another.
+            body, status = {'ok': False, 'error': str(e)}, 500
+        _state_cache = (time.monotonic() + STATE_TTL, body, status)
+        return body, status
+
+
 @app.route('/api/config')
 def config():
     return jsonify({'name': TV_NAME, 'host': TV_HOST, 'port': TV_PORT})
@@ -59,41 +107,24 @@ def index():
 
 @app.route('/api/key/<int:code>', methods=['POST'])
 def key(code):
-    with _lock:
-        try:
-            get_tv().key(code)
-            return jsonify({'ok': True})
-        except Exception as e:
-            drop_tv()
-            return jsonify({'ok': False, 'error': str(e)}), 500
+    return run_action(lambda tv: tv.key(code))
 
 
 @app.route('/api/launch/<name>', methods=['POST'])
 def launch(name):
-    with _lock:
-        try:
-            tv = get_tv()
-            if name in APPS:
-                tv.launch_app(APPS[name])
-            elif name == 'home':
-                tv.go_home()
-            else:
-                tv.shell(f'monkey -p {name} -c android.intent.category.LAUNCHER 1')
-            return jsonify({'ok': True})
-        except Exception as e:
-            drop_tv()
-            return jsonify({'ok': False, 'error': str(e)}), 500
+    def action(tv):
+        if name in APPS:
+            tv.launch_app(APPS[name])
+        elif name == 'home':
+            tv.go_home()
+        else:
+            tv.shell(f'monkey -p {name} -c android.intent.category.LAUNCHER 1')
+    return run_action(action)
 
 
 @app.route('/api/assistant', methods=['POST'])
 def assistant():
-    with _lock:
-        try:
-            get_tv().launch_assistant()
-            return jsonify({'ok': True})
-        except Exception as e:
-            drop_tv()
-            return jsonify({'ok': False, 'error': str(e)}), 500
+    return run_action(lambda tv: tv.launch_assistant())
 
 
 @app.route('/api/text', methods=['POST'])
@@ -102,23 +133,13 @@ def send_text():
     text = data.get('text', '')
     if not text:
         return jsonify({'ok': False, 'error': 'No text provided'}), 400
-    with _lock:
-        try:
-            get_tv().send_text(text)
-            return jsonify({'ok': True})
-        except Exception as e:
-            drop_tv()
-            return jsonify({'ok': False, 'error': str(e)}), 500
+    return run_action(lambda tv: tv.send_text(text))
 
 
 @app.route('/api/state')
 def state():
-    with _lock:
-        try:
-            tv = get_tv()
-            return jsonify({'ok': True, 'screen': tv.screen_state(), 'app': tv.current_app()})
-        except Exception as e:
-            return jsonify({'ok': False, 'error': str(e)}), 500
+    body, status = read_state()
+    return jsonify(body), status
 
 
 PORT = 5052
