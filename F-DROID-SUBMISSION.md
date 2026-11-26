@@ -140,7 +140,7 @@ release APK, from exactly the tagged commit:
 
 1. Bump `versionCode` and `versionName` in `tv-remote-apk/app/build.gradle.kts`
 2. Add `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`
-3. Commit, then `git tag vX.Y && git push origin master vX.Y` (the tag must be `v` + `versionName`)
+3. Commit, then `git tag vX.Y && git push origin main vX.Y` (the tag must be `v` + `versionName`)
 4. The workflow runs `./gradlew assembleRelease` on the tag (ubuntu-24.04, Temurin JDK 21) and checks that
    the tag matches `versionName`, that the APK is signed by the upload key (certificate SHA-256
    `4e2335afa65e6a6f0b42a30ef91f32fcad61c95d8ae153696f3293fdf8cbf563`) and that it equals an unsigned build
